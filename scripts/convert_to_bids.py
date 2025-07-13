@@ -9,6 +9,7 @@ Script to convert the dataset from HDF5 to BIDS format (pretending it's EEG).
 https://bids-specification.readthedocs.io/en/stable/modality-specific-files/electroencephalography.html.
 """
 
+import logging
 from pathlib import Path
 
 import click
@@ -23,6 +24,10 @@ from emg2qwerty.data import EMGSessionData
 
 mne.set_log_level("WARNING")
 
+# Default values as constants
+DEFAULT_DATASET_ROOT = Path(__file__).parents[1].joinpath("data")
+DEFAULT_BIDS_ROOT = Path(__file__).parents[1].joinpath("bids_data")
+
 
 def get_mne_raw(session_path: Path) -> mne.io.Raw:
     """Read data in HDF5 and get an MNE Raw object with keystrokes and prompts
@@ -31,10 +36,13 @@ def get_mne_raw(session_path: Path) -> mne.io.Raw:
     label_data = session.ground_truth()
 
     ch_names = [f"emg{i}" for i in range(16)]
-    ch_names = [f"{ch}_left" for ch in ch_names] + [f"{ch}_right" for ch in ch_names]
+    ch_names = [f"{ch}_left" for ch in ch_names] + [
+        f"{ch}_right" for ch in ch_names
+    ]
     sfreq = 2000.0  # Hz
     data = np.concatenate(
-        (session[EMGSessionData.EMG_LEFT], session[EMGSessionData.EMG_RIGHT]), axis=1
+        (session[EMGSessionData.EMG_LEFT], session[EMGSessionData.EMG_RIGHT]),
+        axis=1,
     )
     info = mne.create_info(ch_names=ch_names, sfreq=sfreq, ch_types="eeg")
     raw = mne.io.RawArray(data.T, info)
@@ -64,7 +72,9 @@ def get_mne_raw(session_path: Path) -> mne.io.Raw:
     idx_end[idx_end >= len(timestamps)] = len(timestamps) - 1
     onset = raw.times[idx_start]
     duration = raw.times[idx_end] - raw.times[idx_start]
-    description = prompts.payload.apply(pd.Series).text.str.replace("⏎", "\\n").values
+    description = (
+        prompts.payload.apply(pd.Series).text.str.replace("⏎", "\\n").values
+    )
     # Prefix with "prompt" to distinguish from keys
     description = ["prompt/" + d for d in description]
     annotation_prompts = mne.Annotations(
@@ -103,20 +113,11 @@ def convert_to_bids(
     )
 
 
-@click.command()
-@click.option(
-    "--dataset-root",
-    type=str,
-    default=Path(__file__).parents[1].joinpath("data"),
-    help="Original dataset root directory (defaults to 'data' folder)",
-)
-@click.option(
-    "--bids-root",
-    type=str,
-    default=Path(__file__).parents[1].joinpath("bids_data"),
-    help="BIDS dataset root directory (defaults to 'bids_data' folder)",
-)
-def main(dataset_root: str, bids_root: str):
+def convert_to_bids_core(
+    dataset_root: str = str(DEFAULT_DATASET_ROOT),
+    bids_root: str = str(DEFAULT_BIDS_ROOT),
+):
+    """Core function for converting to BIDS format that can be called programmatically."""
     df = pd.read_csv(Path(dataset_root).joinpath("metadata.csv"))
     users = sorted(df["user"].unique())
     for subject_idx, user in enumerate(users):
@@ -129,6 +130,27 @@ def main(dataset_root: str, bids_root: str):
                 session_path=session_path,
                 bids_root=bids_root,
             )
+
+
+@click.command()
+@click.option(
+    "--dataset-root",
+    type=str,
+    default=str(DEFAULT_DATASET_ROOT),
+    help="Original dataset root directory (defaults to 'data' folder)",
+)
+@click.option(
+    "--bids-root",
+    type=str,
+    default=str(DEFAULT_BIDS_ROOT),
+    help="BIDS dataset root directory (defaults to 'bids_data' folder)",
+)
+def main(dataset_root: str, bids_root: str):
+    """Click command wrapper for convert_to_bids_core."""
+    convert_to_bids_core(
+        dataset_root=dataset_root,
+        bids_root=bids_root,
+    )
 
 
 if __name__ == "__main__":

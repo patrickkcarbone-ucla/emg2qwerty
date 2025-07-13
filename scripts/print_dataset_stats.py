@@ -14,6 +14,9 @@ from pathlib import Path
 import click
 import pandas as pd
 
+# Default values as constants
+DEFAULT_DATASET_ROOT = Path(__file__).parents[1].joinpath("data")
+
 
 def print_dataset_stats(metadata_df: pd.DataFrame):
     df = metadata_df.copy()
@@ -43,16 +46,24 @@ def print_dataset_stats(metadata_df: pd.DataFrame):
     print("\n---------------\n")
 
 
+def print_dataset_stats_core(
+    dataset_root: str = str(DEFAULT_DATASET_ROOT),
+):
+    """Core function for printing dataset stats that can be called programmatically."""
+    metadata_df = pd.read_csv(Path(dataset_root).joinpath("metadata.csv"))
+    print_dataset_stats(metadata_df)
+
+
 @click.command()
 @click.option(
     "--dataset-root",
     type=str,
-    default=Path(__file__).parents[1].joinpath("data"),
+    default=str(DEFAULT_DATASET_ROOT),
     help="Dataset root directory",
 )
 def main(dataset_root: str):
-    metadata_df = pd.read_csv(Path(dataset_root).joinpath("metadata.csv"))
-    print_dataset_stats(metadata_df)
+    """Click command wrapper for print_dataset_stats_core."""
+    print_dataset_stats_core(dataset_root=dataset_root)
 
 
 if __name__ == "__main__":

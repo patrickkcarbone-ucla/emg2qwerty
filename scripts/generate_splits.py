@@ -34,6 +34,14 @@ import yaml
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
+# Default values as constants
+DEFAULT_DATASET_ROOT = Path(__file__).parents[1].joinpath("data")
+DEFAULT_N_TEST_USERS = 8
+DEFAULT_MIN_TRAIN_SESSIONS_PER_USER = 2
+DEFAULT_N_VAL_SESSIONS_PER_USER = 2
+DEFAULT_N_TEST_SESSIONS_PER_USER = 2
+DEFAULT_SEED = 1501
+
 
 def filter_users(df: pd.DataFrame, min_sessions: int) -> pd.Series:
     """Return a `pd.Series` consisting of users who have at least
@@ -53,7 +61,9 @@ def sample_users(
     return users.sample(n=n, random_state=seed)
 
 
-def sample_test_users(df: pd.DataFrame, n: int, seed: int | None = None) -> pd.Series:
+def sample_test_users(
+    df: pd.DataFrame, n: int, seed: int | None = None
+) -> pd.Series:
     """Sample `n` users for personalization by giving precedence to those
     with the most number of sessions."""
     # Exclude uses with quality check warnings
@@ -101,7 +111,9 @@ def generate_split(
     provided per-user constraints."""
     # Filter out users with too few sessions to satisfy constraints
     min_sessions = (
-        min_train_sessions_per_user + n_val_sessions_per_user + n_test_sessions_per_user
+        min_train_sessions_per_user
+        + n_val_sessions_per_user
+        + n_test_sessions_per_user
     )
     users = filter_users(df, min_sessions=min_sessions)
     df = df[df.user.isin(users)]
@@ -151,52 +163,15 @@ def dump_split(
     )
 
 
-@click.command()
-@click.option(
-    "--dataset-root",
-    type=str,
-    default=Path(__file__).parents[1].joinpath("data"),
-    help="Dataset root directory",
-)
-@click.option(
-    "--n-test-users",
-    type=int,
-    default=8,
-    help="Number of users to be held out for test/personalization",
-)
-@click.option(
-    "--min-train-sessions-per-user",
-    type=int,
-    default=2,
-    help="Drop users for whom at least these many training sessions "
-    "cannot be satisfied after considering val/test",
-)
-@click.option(
-    "--n-val-sessions-per-user",
-    type=int,
-    default=2,
-    help="Number of validation sessions per user",
-)
-@click.option(
-    "--n-test-sessions-per-user",
-    type=int,
-    default=2,
-    help="Number of test sessions per held-out/personalization user",
-)
-@click.option(
-    "--seed",
-    type=int,
-    default=1501,
-    help="Random seed for deterministic train/val/test splits",
-)
-def main(
-    dataset_root: str,
-    n_test_users: int,
-    min_train_sessions_per_user: int,
-    n_val_sessions_per_user: int,
-    n_test_sessions_per_user: int,
-    seed: int,
+def generate_splits_core(
+    dataset_root: str = str(DEFAULT_DATASET_ROOT),
+    n_test_users: int = DEFAULT_N_TEST_USERS,
+    min_train_sessions_per_user: int = DEFAULT_MIN_TRAIN_SESSIONS_PER_USER,
+    n_val_sessions_per_user: int = DEFAULT_N_VAL_SESSIONS_PER_USER,
+    n_test_sessions_per_user: int = DEFAULT_N_TEST_SESSIONS_PER_USER,
+    seed: int = DEFAULT_SEED,
 ):
+    """Core function for generating splits that can be called programmatically."""
     df = pd.read_csv(Path(dataset_root).joinpath("metadata.csv"))
     df.quality_check_tags = df.quality_check_tags.apply(yaml.safe_load)
 
@@ -245,6 +220,63 @@ def main(
             val=personalized_val[personalized_val["user"] == user],
             test=personalized_test[personalized_test["user"] == user],
         )
+
+
+@click.command()
+@click.option(
+    "--dataset-root",
+    type=str,
+    default=str(DEFAULT_DATASET_ROOT),
+    help="Dataset root directory",
+)
+@click.option(
+    "--n-test-users",
+    type=int,
+    default=DEFAULT_N_TEST_USERS,
+    help="Number of users to be held out for test/personalization",
+)
+@click.option(
+    "--min-train-sessions-per-user",
+    type=int,
+    default=DEFAULT_MIN_TRAIN_SESSIONS_PER_USER,
+    help="Drop users for whom at least these many training sessions "
+    "cannot be satisfied after considering val/test",
+)
+@click.option(
+    "--n-val-sessions-per-user",
+    type=int,
+    default=DEFAULT_N_VAL_SESSIONS_PER_USER,
+    help="Number of validation sessions per user",
+)
+@click.option(
+    "--n-test-sessions-per-user",
+    type=int,
+    default=DEFAULT_N_TEST_SESSIONS_PER_USER,
+    help="Number of test sessions per held-out/personalization user",
+)
+@click.option(
+    "--seed",
+    type=int,
+    default=DEFAULT_SEED,
+    help="Random seed for deterministic train/val/test splits",
+)
+def main(
+    dataset_root: str,
+    n_test_users: int,
+    min_train_sessions_per_user: int,
+    n_val_sessions_per_user: int,
+    n_test_sessions_per_user: int,
+    seed: int,
+):
+    """Click command wrapper for generate_splits_core."""
+    generate_splits_core(
+        dataset_root=dataset_root,
+        n_test_users=n_test_users,
+        min_train_sessions_per_user=min_train_sessions_per_user,
+        n_val_sessions_per_user=n_val_sessions_per_user,
+        n_test_sessions_per_user=n_test_sessions_per_user,
+        seed=seed,
+    )
 
 
 if __name__ == "__main__":
